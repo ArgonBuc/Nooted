@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notizblock / ToDo Liste</title>
+  <style>
+    body {
+      background-color: #333;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      overflow: hidden;
+    }
+    .notiz {
+      position: absolute;
+      width: 200px;
+      height: 200px;
+      padding: 10px;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+      cursor: move;
+      resize: both;
+      overflow: auto;
+    }
+    .notiz .close-btn {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      background-color: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 20px;
+      color: #f44336;
+    }
+    .notiz .close-btn:before {
+      content: "\1F525";
+    }
+    .controls {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      z-index: 1000;
+    }
+    .controls button {
+      padding: 10px;
+      margin-right: 5px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      color: white;
+      font-weight: bold;
+    }
+    .controls button:hover { opacity: 0.8; }
+    .color-red { background-color: #f44336; }
+    .color-blue { background-color: #2196f3; }
+    .color-green { background-color: #4caf50; }
+    .color-yellow { background-color: #ffeb3b; color: black; }
+    .btn-yellow { background-color: #ffeb3b; color: black; }
+    .btn-red { background-color: #f44336; }
+    .btn-blue { background-color: #2196f3; }
+    .btn-green { background-color: #4caf50; }
+  </style>
+</head>
+<body>
+  <div class="controls">
+    <button class="btn-yellow" onclick="createNotiz('color-yellow')">+</button>
+    <button class="btn-red" onclick="createNotiz('color-red')">+</button>
+    <button class="btn-blue" onclick="createNotiz('color-blue')">+</button>
+    <button class="btn-green" onclick="createNotiz('color-green')">+</button>
+  </div>
+
+  <script>
+    let fileHandle;
+
+    async function init() {
+      try {
+        const savedFile = await window.showOpenFilePicker({
+          types: [{
+            description: 'JSON-Dateien',
+            accept: {'application/json': ['.json']}
+          }],
+          excludeAcceptAllOption: true,
+          multiple: false
+        });
+        fileHandle = savedFile[0];
+        await loadNotizenFromFile();
+      } catch {
+        await createNewFile();
+      }
+    }
+
+    async function createNewFile() {
+      const newHandle = await window.showSaveFilePicker({
+        suggestedName: 'notizen.json',
+        types: [{
+          description: 'JSON-Dateien',
+          accept: {'application/json': ['.json']}
+        }]
+      });
+      fileHandle = newHandle;
+      await saveNotizen();
+    }
+
+    async function saveNotizen() {
+      if (!fileHandle) return;
+      const notizen = [];
+      document.querySelectorAll('.notiz').forEach(notiz => {
+        const textContent = notiz.querySelector('div[contenteditable=true]');
+        notizen.push({
+          content: textContent.innerText,
+          colorClass: Array.from(notiz.classList).find(cls => cls.startsWith('color-')),
+          top: notiz.style.top,
+          left: notiz.style.left,
+          width: notiz.style.width,
+          height: notiz.style.height
+        });
+      });
+      const writable = await fileHandle.createWritable();
+      await writable.write(JSON.stringify(notizen, null, 2));
+      await writable.close();
+    }
+
+    async function loadNotizenFromFile() {
+      const file = await fileHandle.getFile();
+      const contents = await file.text();
+      const savedNotizen = JSON.parse(contents);
+      savedNotizen.forEach(notiz => {
+        createNotiz(notiz.colorClass, notiz.content, notiz.top, notiz.left, notiz.width, notiz.height);
+      });
+    }
+
+    function createNotiz(colorClass, content = "", top = '50px', left = '50px', width = '200px', height = '200px') {
+      const notiz = document.createElement('div');
+      notiz.classList.add('notiz', colorClass);
+      const textContent = document.createElement('div');
+      textContent.contentEditable = true;
+      textContent.innerText = content;
+      notiz.appendChild(textContent);
+
+      const closeButton = document.createElement('button');
+      closeButton.classList.add('close-btn');
+      closeButton.onclick = function() {
+        notiz.remove();
+        saveNotizen();
+      };
+      notiz.appendChild(closeButton);
+
+      document.body.appendChild(notiz);
+      notiz.style.top = top;
+      notiz.style.left = left;
+      notiz.style.width = width;
+      notiz.style.height = height;
+
+      makeDraggable(notiz);
+      textContent.addEventListener('input', saveNotizen);
+      notiz.addEventListener('mouseup', saveNotizen);
+    }
+
+    function makeDraggable(el) {
+      let isDragging = false, x = 0, y = 0, offsetX = 0, offsetY = 0;
+      el.addEventListener('mousedown', (e) => {
+        if (e.target.classList.contains('close-btn')) return;
+        isDragging = true;
+        x = e.clientX;
+        y = e.clientY;
+        offsetX = el.offsetLeft;
+        offsetY = el.offsetTop;
+        el.style.zIndex = 1000;
+      });
+      document.addEventListener('mousemove', (e) => {
+        if (isDragging) {
+          const dx = e.clientX - x;
+          const dy = e.clientY - y;
+          el.style.left = `${offsetX + dx}px`;
+          el.style.top = `${offsetY + dy}px`;
+        }
+      });
+      document.addEventListener('mouseup', () => {
+        if (isDragging) {
+          isDragging = false;
+          saveNotizen();
+        }
+      });
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>
